@@ -17,22 +17,21 @@ public class Field {
         for (int i=0; i <= Layout.COLS; i++){
             for (int j=0; j<= Layout.ROWS; j++) {
                 Pos pos = new Pos(i,j);
-                Semaphore semaphore = new Semaphore(1);
-                positionStatus.put(pos, semaphore);
+                Semaphore mutex = new Semaphore(1);
+                positionStatus.put(pos, mutex);
             }
         }
     }
 
     /* Block until car no. may safely enter tile at pos */
     public void enter(int no, Pos pos) throws InterruptedException {
-        Semaphore s = positionStatus.get(pos);
-        s.P();
+        Semaphore mutex = positionStatus.get(pos);
+        mutex.P();
     }
 
     /* Release tile at position pos */
     public void leave(Pos pos) {
-        Semaphore s = positionStatus.get(pos);
-        s.V();
+        Semaphore mutex = positionStatus.get(pos);
+        mutex.V();
     }
-
 }
