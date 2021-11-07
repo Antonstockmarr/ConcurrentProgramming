@@ -7,7 +7,9 @@
 class SafeBarrier extends Barrier {
 
     int arrived = 0;
+    int waiting = 0;
     int threshold = 9;
+    boolean open = false;
     boolean active = false;
 
     public SafeBarrier(CarDisplayI cd) {
@@ -24,9 +26,18 @@ class SafeBarrier extends Barrier {
             arrived++;
 
             if (arrived < threshold) {
-                while (arrived < threshold) wait();
+                while (open && active) wait();
+
+                waiting++;
+                while (!open && active) wait();
+                waiting--;
+                if (waiting == 0) {
+                    open = false;
+                    notifyAll();
+                }
             } else {
                 arrived = 0;
+                open = true;
                 notifyAll();
             }
 
