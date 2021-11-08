@@ -6,6 +6,8 @@
 
 
 import java.awt.Color;
+import java.util.ArrayList;
+import java.util.List;
 
 class Conductor extends Thread {
 
@@ -13,10 +15,10 @@ class Conductor extends Thread {
     double variation =  40;          // Percentage of base speed
 
     CarDisplayI cd;                  // GUI part
-    
+
     Field field;                     // Field control
-    Alley alley;                     // Alley control    
-    Barrier barrier;                 // Barrier control    
+    Alley alley;                     // Alley control
+    Barrier barrier;                 // Barrier control
 
     int no;                          // Car number
     Pos startpos;                    // Start position (provided by GUI)
@@ -24,10 +26,11 @@ class Conductor extends Thread {
     Color col;                       // Car  color
     Gate mygate;                     // Gate at start position
 
-    Pos curpos;                      // Current position 
+    Pos curpos;                      // Current position
     Pos newpos;                      // New position to go to
 
     Boolean inAlley;
+    List<Pos> enteredPositions;
 
     public Conductor(int no, CarDisplayI cd, Gate g, Field field, Alley alley, Barrier barrier) {
 
@@ -43,19 +46,21 @@ class Conductor extends Thread {
         col = chooseColor();
 
         inAlley = false;
+        enteredPositions = new ArrayList<>();
+
 
         // special settings for car no. 0
         if (no==0) {
             basespeed = -1.0;
-            variation = 0; 
+            variation = 0;
         }
     }
 
-    public synchronized void setSpeed(double speed) { 
+    public synchronized void setSpeed(double speed) {
         basespeed = speed;
     }
 
-    public synchronized void setVariation(int var) { 
+    public synchronized void setVariation(int var) {
         if (no != 0 && 0 <= var && var <= 100) {
             variation = var;
         }
@@ -63,13 +68,13 @@ class Conductor extends Thread {
             cd.println("Illegal variation settings");
     }
 
-    synchronized double chooseSpeed() { 
+    synchronized double chooseSpeed() {
         double factor = (1.0D+(Math.random()-0.5D)*2*variation/100);
         return factor*basespeed;
     }
 
-    Color chooseColor() { 
-        return Color.blue; // You can get any color, as longs as it's blue 
+    Color chooseColor() {
+        return Color.blue; // You can get any color, as longs as it's blue
     }
 
     Pos nextPos(Pos pos) {
@@ -82,62 +87,67 @@ class Conductor extends Thread {
     }
 
     boolean atEntry(Pos pos) {
-        return (pos.row ==  1 && pos.col ==  1) || (pos.row ==  2 && pos.col ==  1) || 
-               (pos.row == 10 && pos.col ==  0);
+        return (pos.row ==  1 && pos.col ==  1) || (pos.row ==  2 && pos.col ==  1) ||
+                (pos.row == 10 && pos.col ==  0);
     }
 
     boolean atExit(Pos pos) {
         return (pos.row ==  0 && pos.col ==  0) || (pos.row ==  9 && pos.col ==  1);
     }
-    
+
     boolean atBarrier(Pos pos) {
         return pos.equals(barpos);
     }
 
+
     public void run() {
         CarI car = cd.newCar(no, col, startpos);
+        cd.register(car);
         try {
             curpos = startpos;
             field.enter(no, curpos);
-            cd.register(car);
+            enteredPositions.add(curpos);
 
-            while (true) { 
+            while (true) {
 
                 if (atGate(curpos)) {
-                    mygate.pass(); 
+                    mygate.pass();
                     car.setSpeed(chooseSpeed());
                 }
 
                 newpos = nextPos(curpos);
 
                 if (atBarrier(curpos)) barrier.sync(no);
-                
+
                 if (atEntry(curpos)) {
                     alley.enter(no);
                     inAlley = true;
                 }
+
                 field.enter(no, newpos);
+                enteredPositions.add(newpos);
 
-                try {
-                    car.driveTo(newpos);
-                } catch (InterruptedException ie) {
-                    field.leave(newpos);
-                    throw ie;
-                }
-
+                car.driveTo(newpos);
 
                 field.leave(curpos);
+                enteredPositions.remove(curpos);
+                curpos = newpos;
+
                 if (atExit(newpos)) {
                     alley.leave(no);
                     inAlley = false;
                 }
 
-                curpos = newpos;
+                if (currentThread().isInterrupted()) {
+                    throw new InterruptedException();
+                }
             }
 
         } catch (InterruptedException ie) {
             cd.deregister(car);
-            field.leave(curpos);
+            for (Pos pos : enteredPositions) {
+                field.leave(pos);
+            }
             if (inAlley) {
                 alley.leave(no);
             }
@@ -174,7 +184,7 @@ public class CarControl implements CarControlI{
             conductor[no] = new Conductor(no,cd,gate[no],field,alley,barrier);
             conductor[no].setName("Conductor-" + no);
             conductor[no].start();
-        } 
+        }
     }
 
     public void startCar(int no) {
@@ -185,7 +195,7 @@ public class CarControl implements CarControlI{
         gate[no].close();
     }
 
-    public void barrierOn() { 
+    public void barrierOn() {
         barrier.on();
     }
 
@@ -195,7 +205,7 @@ public class CarControl implements CarControlI{
 
     public void barrierSet(int k) {
         barrier.set(k);
-   }
+    }
 
     public void removeCar(int no) {
         if (!(conductor[no] == null)) {
@@ -215,11 +225,11 @@ public class CarControl implements CarControlI{
 
     /* Speed settings for testing purposes */
 
-    public void setSpeed(int no, double speed) { 
+    public void setSpeed(int no, double speed) {
         conductor[no].setSpeed(speed);
     }
 
-    public void setVariation(int no, int var) { 
+    public void setVariation(int no, int var) {
         conductor[no].setVariation(var);
     }
 
